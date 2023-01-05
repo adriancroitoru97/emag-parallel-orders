@@ -8,7 +8,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
 /**
- * Order's Manipulator Thread
+ * Order's Worker Thread.
  */
 public class OrdersThread implements Runnable {
 
@@ -20,7 +20,8 @@ public class OrdersThread implements Runnable {
     private final PrintStream orderPrintStream;
     private final PrintStream itemsPrintStream;
 
-    public OrdersThread(Integer id, String inputPath, Integer nrThreads,
+    public OrdersThread(Integer id, String inputPath,
+                        Integer nrThreads,
                         ExecutorService itemsService,
                         PrintStream orderPrintStream,
                         PrintStream itemsPrintStream) {
@@ -28,7 +29,6 @@ public class OrdersThread implements Runnable {
         this.nrThreads = nrThreads;
         this.id = id;
         this.itemsService = itemsService;
-
         this.orderPrintStream = orderPrintStream;
         this.itemsPrintStream = itemsPrintStream;
     }
@@ -54,23 +54,23 @@ public class OrdersThread implements Runnable {
 
     /**
      * Gets the according bytes chunk for a specific thread, making sure that
-     * orders are not split.
+     * the last order is not split in half.
      * @param chunkSize current thread's calculated chunkSize in bytes
-     * @param channel
+     * @param channel the input channel
      * @return a String containing a list of orders for current thread
-     * @throws IOException
+     * @throws IOException thrown by the input channel
      */
     private String chunkFile(int chunkSize, FileChannel channel) throws IOException {
         int size = chunkSize;
 
         ByteBuffer buffer = ByteBuffer.allocate(size);
-        int bytesRead = channel.read(buffer, (long) id * chunkSize);
+        channel.read(buffer, (long) id * chunkSize);
         String content = new String(buffer.array(), StandardCharsets.UTF_8);
 
         while (content.charAt(content.length() - 1) != '\n') {
             size++;
             buffer = ByteBuffer.allocate(size);
-            bytesRead = channel.read(buffer, (long) id * chunkSize);
+            channel.read(buffer, (long) id * chunkSize);
             content = new String(buffer.array(), StandardCharsets.UTF_8);
         }
 
@@ -96,9 +96,12 @@ public class OrdersThread implements Runnable {
             for (String order : orders) {
                 String[] args = order.split(",");
 
-                /* Ignore empty commands */
+                /* Allow only non-empty commands */
                 if (Integer.parseInt(args[1]) > 0) {
-                    Future<?> f = itemsService.submit(new ItemsThread(args[0], Integer.parseInt(args[1]), inputPath, itemsPrintStream));
+                    Future<?> f = itemsService.submit(new ItemsThread(
+                            args[0], Integer.parseInt(args[1]),
+                            inputPath, itemsPrintStream
+                    ));
                     ordersStatus.put(order, f);
                     ordersWritten.put(order, false);
                 }
@@ -110,10 +113,8 @@ public class OrdersThread implements Runnable {
             while (doneOrders != ordersStatus.size()) {
                 for (Map.Entry<String, Future<?>> order : ordersStatus.entrySet()) {
                     if (!ordersWritten.get(order.getKey()) && order.getValue().isDone()) {
-
                         /* Write the shipped order in the output file */
                         orderPrintStream.println(order.getKey() + ",shipped");
-
                         /* Mark the current order as shipped */
                         ordersWritten.replace(order.getKey(), true);
 
