@@ -1,0 +1,19 @@
+Implementare BONUS:
+
+-	am aflat dimensiunea in bytes a fisierului orders.txt si am impartit-o la
+	numarul de thread-uri, afland astfel dimensiunea chunk-ului de bytes aferent
+	fiecarui thread in parte.
+- 	am deschis cate un FileInputStream pe fiecare thread, alocand initial dimensi
+	unea bufferului exact cat chunk size-ul anterior calculat.
+-	buffer-ul fiecarui thread are un offset aferent id-ului respectivului thread
+	EX: 	chunkSize = 40, fileSize = 200, nrThreads = 5;
+		thread0_start = 0 * 40 = 0
+		thread1_start = 1 * 40 = 40
+		.
+		.
+
+- 	Pentru a rezolva impartirea imperfecta a fisierului de input pe linii
+	(pe comenzi), am eliminat prima comanda din orice thread daca aceasta era
+	incompleta (nu incepea cu "o_") si am extins buffer-ul fiecarui thread daca
+	ultima comanda era incompleta (ultimul caracter nu era '\n')
+	
