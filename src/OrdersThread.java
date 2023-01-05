@@ -1,5 +1,3 @@
-package com.tema2;
-
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -16,14 +14,23 @@ public class OrdersThread implements Runnable {
 
     private final Integer id;
     private final Integer nrThreads;
-    private final String ioPath;
+    private final String inputPath;
     private final ExecutorService itemsService;
 
-    public OrdersThread(Integer id, String ioPath, Integer nrThreads, ExecutorService itemsService) {
-        this.ioPath = ioPath;
+    private final PrintStream orderPrintStream;
+    private final PrintStream itemsPrintStream;
+
+    public OrdersThread(Integer id, String inputPath, Integer nrThreads,
+                        ExecutorService itemsService,
+                        PrintStream orderPrintStream,
+                        PrintStream itemsPrintStream) {
+        this.inputPath = inputPath;
         this.nrThreads = nrThreads;
         this.id = id;
         this.itemsService = itemsService;
+
+        this.orderPrintStream = orderPrintStream;
+        this.itemsPrintStream = itemsPrintStream;
     }
 
     /**
@@ -75,12 +82,12 @@ public class OrdersThread implements Runnable {
         Map<String, Future<?>> ordersStatus = new HashMap<>();
         Map<String, Boolean> ordersWritten = new HashMap<>();
 
-        File file = new File(ioPath + "\\orders.txt");
-        Long fileSize = file.length();
+        File inputFile = new File(inputPath + "/orders.txt");
+        Long fileSize = inputFile.length();
         int chunkSize = Math.toIntExact(fileSize / nrThreads);
 
         try {
-            FileInputStream fis = new FileInputStream(file);
+            FileInputStream fis = new FileInputStream(inputFile);
             FileChannel channel = fis.getChannel();
 
             String content = chunkFile(chunkSize, channel);
@@ -88,30 +95,32 @@ public class OrdersThread implements Runnable {
 
             for (String order : orders) {
                 String[] args = order.split(",");
-                Future<?> f = itemsService.submit(new ItemsThread(args[0], Integer.parseInt(args[1]), ioPath));
-                ordersStatus.put(order, f);
-                ordersWritten.put(order, false);
+
+                /* Ignore empty commands */
+                if (Integer.parseInt(args[1]) > 0) {
+                    Future<?> f = itemsService.submit(new ItemsThread(args[0], Integer.parseInt(args[1]), inputPath, itemsPrintStream));
+                    ordersStatus.put(order, f);
+                    ordersWritten.put(order, false);
+                }
             }
 
             channel.close();
 
             int doneOrders = 0;
             while (doneOrders != ordersStatus.size()) {
-
                 for (Map.Entry<String, Future<?>> order : ordersStatus.entrySet()) {
                     if (!ordersWritten.get(order.getKey()) && order.getValue().isDone()) {
-                        // vezi daca trb sync
-                        Writer fileWriter = new FileWriter(ioPath + "\\orders_out.txt", true);
-                        fileWriter.write(id+order.getKey() + ",shipped\n");
-                        fileWriter.close();
 
+                        /* Write the shipped order in the output file */
+                        orderPrintStream.println(order.getKey() + ",shipped");
+
+                        /* Mark the current order as shipped */
                         ordersWritten.replace(order.getKey(), true);
 
                         doneOrders++;
                     }
                 }
             }
-
         } catch (IOException e) {
             e.printStackTrace();
         }
